@@ -1,70 +1,38 @@
-from transformers import RobertaTokenizer
+import re
+import numpy as np
+from gensim.models import Word2Vec
+
+# Load Word2Vec model
+w2v_model = Word2Vec.load("models/word2vec_withString10-200-300.model")
+embedding_dim = w2v_model.vector_size  # should be 300
+
+def tokenize_code(code):
+    return re.findall(r'\b\w+\b', code)
 
 def preprocess_code_sliding_window(file_path, maxlen=200, stride=100):
     with open(file_path, "r") as f:
         code = f.read()
 
-    tokenizer = RobertaTokenizer.from_pretrained("microsoft/graphcodebert-base")
-    tokens = tokenizer(code, return_tensors='pt', truncation=False)
+    tokens = tokenize_code(code)
 
-    input_ids = tokens['input_ids'][0].tolist()  # Convert tensor to list
+    vectorized = []
+    for token in tokens:
+        if token in w2v_model.wv:
+            vectorized.append(w2v_model.wv[token])
+        else:
+            vectorized.append(np.zeros(embedding_dim))
 
     chunks = []
-    num_tokens = len(input_ids)
-
-    # Sliding window logic
-    for start in range(0, num_tokens, stride):
+    for start in range(0, len(vectorized), stride):
         end = start + maxlen
-        chunk = input_ids[start:end]
+        chunk = vectorized[start:end]
 
-        # Pad chunk if shorter than maxlen
         if len(chunk) < maxlen:
-            chunk += [tokenizer.pad_token_id] * (maxlen - len(chunk))
+            chunk.extend([np.zeros(embedding_dim)] * (maxlen - len(chunk)))
 
-        chunks.append(chunk)
+        chunks.append(np.array(chunk))
 
-        if end >= num_tokens:
+        if end >= len(vectorized):
             break
 
-    return chunks, tokenizer
-
-
-# from transformers import RobertaTokenizer
-
-
-
-# def preprocess_code_sliding_window(file_path, maxlen=200, stride=100):
-#     with open(file_path, "r") as f:
-#         code = f.read()
-        
-
-#     tokenizer = RobertaTokenizer.from_pretrained("microsoft/graphcodebert-base")
-#     tokens = tokenizer(code, return_tensors='pt', truncation=False)
-#     print(tokens)
-
-#     input_ids = tokens['input_ids'][0].tolist()  # Convert tensor to list
-
-#     chunks = []
-#     num_tokens = len(input_ids)
-
-#     # Sliding window logic
-#     for start in range(0, num_tokens, stride):
-#         end = start + maxlen
-#         chunk = input_ids[start:end]
-#         print(chunk)
-
-#         # Pad chunk if shorter than maxlen
-#         if len(chunk) < maxlen:
-#             chunk += [tokenizer.pad_token_id] * (maxlen - len(chunk))
-
-#         chunks.append(chunk)
-
-#         if end >= num_tokens:
-#             break
-
-#     return chunks, tokenizer
-
-
-# preprocess_code_sliding_window("C:\\Users\\rashm\\Desktop\\AI_Code_Validation_Project\\temp_code.py")
-
-
+    return chunks
